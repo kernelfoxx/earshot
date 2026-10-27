@@ -234,6 +234,8 @@ mod tests {
         Db::open(&path).unwrap();
         let db = Db::open(&path).unwrap();
         assert_eq!(db.play_count().unwrap(), 0);
+        // Windows can't delete a file that is still open.
+        drop(db);
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
