@@ -26,8 +26,12 @@ pub struct MediaSnapshot {
     pub title: String,
     pub artist: String,
     pub album: Option<String>,
-    /// Artwork URL, when the backend exposes the original one (MPRIS).
+    /// Artwork URL, when the backend exposes one (MPRIS). Firefox passes the
+    /// original `https://` URL, Chromium a local `file://` copy.
     pub art_url: Option<String>,
+    /// Artwork size in pixels, when the backend could read it. Used to tell
+    /// 16:9 video thumbnails from square album covers.
+    pub art_size: Option<(u32, u32)>,
     pub duration_ms: Option<u64>,
     pub position_ms: Option<u64>,
 }

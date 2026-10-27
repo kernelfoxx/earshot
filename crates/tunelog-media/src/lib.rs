@@ -5,6 +5,11 @@
 
 pub use tunelog_core::media::{MediaSnapshot, PlaybackStatus};
 
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(windows)]
+mod windows;
+
 #[derive(Debug, thiserror::Error)]
 pub enum MediaError {
     #[error("media backend is not supported on this platform")]
@@ -24,7 +29,7 @@ pub type ChangeNotifier = Box<dyn Fn() + Send + Sync + 'static>;
 /// Backends should be event-driven where the OS allows it and call the
 /// notifier on changes; the tracker additionally polls at a low rate as a
 /// safety net, so `sessions` must be cheap.
-pub trait MediaSource: Send {
+pub trait MediaSource {
     /// Human-readable backend name for logs, e.g. `"gsmtc"` or `"mpris"`.
     fn name(&self) -> &'static str;
 
@@ -35,7 +40,13 @@ pub trait MediaSource: Send {
     fn sessions(&mut self) -> Result<Vec<MediaSnapshot>>;
 }
 
-/// Backend for the current platform.
+/// Backend for the current platform. Must be created and used on the same
+/// thread.
 pub fn platform_source() -> Result<Box<dyn MediaSource>> {
+    #[cfg(target_os = "linux")]
+    return Ok(Box::new(linux::Mpris::new()?));
+    #[cfg(windows)]
+    return Ok(Box::new(windows::Gsmtc::new()?));
+    #[cfg(not(any(target_os = "linux", windows)))]
     Err(MediaError::Unsupported)
 }

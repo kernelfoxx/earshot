@@ -10,3 +10,18 @@ rust-version.workspace = true
 [dependencies]
 tunelog-core.workspace = true
 thiserror.workspace = true
+log.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
+imagesize = "0.15"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Foundation",
+    "Foundation_Collections",
+    "Graphics_Imaging",
+    "Media_Control",
+    "Storage_Streams",
+    "Win32_System_WinRT",
+] }
