@@ -1,6 +1,14 @@
 // Sample data for running the UI in a plain browser (`npm run dev`),
 // used for development and README screenshots.
-import type { Overview, Play } from "./types";
+import type {
+  ImportRecord,
+  ImportReport,
+  Overview,
+  Play,
+  SoundcloudMapping,
+  SoundcloudPreview,
+  UnclassifiedGroup,
+} from "./types";
 
 const H = 3_600_000;
 const M = 60_000;
@@ -43,4 +51,63 @@ export function demoNowPlaying(): Play {
     ended_at: now,
     played_ms: 95_000,
   };
+}
+
+export function demoImportReport(): ImportReport {
+  return { import_id: 1, added: 14_211, duplicates: 312, already_imported: 0, skipped: 87, estimated: 0 };
+}
+
+export function demoImports(): ImportRecord[] {
+  return [
+    {
+      id: 2,
+      kind: "takeout",
+      files: "takeout-20261001T120000Z-001.zip",
+      imported_at: Date.now() - 2 * 86_400_000,
+      added: 6_402,
+      duplicates: 120,
+      skipped: 9_811,
+    },
+    {
+      id: 1,
+      kind: "spotify_export",
+      files: "my_spotify_data.zip",
+      imported_at: Date.now() - 5 * 86_400_000,
+      added: 14_211,
+      duplicates: 312,
+      skipped: 87,
+    },
+  ];
+}
+
+export function demoSoundcloudPreview(mapping?: SoundcloudMapping): SoundcloudPreview {
+  const columns = ["Played At", "Track Title", "Artist", "Track URL"];
+  return {
+    columns,
+    mapping: mapping ?? {
+      time: "Played At",
+      title: "Track Title",
+      artist: "Artist",
+      duration: null,
+      url: "Track URL",
+    },
+    rows: 1000,
+    sample: [
+      { time: Date.now() - 3_600_000, title: "Never Be Like You", artist: "Flume", duration_ms: null },
+      { time: Date.now() - 3_400_000, title: "Say My Name", artist: "ODESZA", duration_ms: null },
+    ],
+  };
+}
+
+export function demoUnclassified(): UnclassifiedGroup[] {
+  return [
+    {
+      norm_artist: "lofi girl",
+      artist: "Lofi Girl",
+      plays: 23,
+      total_ms: 4_920_000,
+      sample_titles: ["lofi hip hop radio", "synthwave radio"],
+      source_apps: ["Chrome"],
+    },
+  ];
 }

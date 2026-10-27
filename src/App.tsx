@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Sidebar, type Page } from "./components/Sidebar";
 import { Dashboard } from "./features/dashboard/Dashboard";
 import { Placeholder } from "./components/Placeholder";
+import { ImportPage } from "./features/import/ImportPage";
 
 const titles: Record<Page, string> = {
   overview: "Overview",
@@ -19,7 +20,9 @@ export function App() {
       <Sidebar current={page} onNavigate={setPage} />
       <main className="content">
         <h1 className="page-title">{titles[page]}</h1>
-        {page === "overview" ? <Dashboard /> : <Placeholder />}
+        {page === "overview" && <Dashboard />}
+        {page === "import" && <ImportPage />}
+        {page !== "overview" && page !== "import" && <Placeholder />}
       </main>
     </div>
   );

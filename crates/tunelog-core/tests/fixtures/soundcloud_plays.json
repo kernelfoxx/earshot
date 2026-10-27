@@ -1,0 +1,17 @@
+{
+  "user": { "username": "listener" },
+  "plays": [
+    {
+      "played_at": "2024-05-01T10:00:00Z",
+      "track": { "title": "Track One", "user": { "username": "Artist A" } }
+    },
+    {
+      "played_at": "2024-05-01T10:03:00Z",
+      "track": { "title": "Track Two", "user": { "username": "Artist B" } }
+    },
+    {
+      "played_at": "2024-05-01T12:00:00Z",
+      "track": { "title": "Track Three", "user": { "username": "Artist A" } }
+    }
+  ]
+}

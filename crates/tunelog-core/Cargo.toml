@@ -9,8 +9,12 @@ rust-version.workspace = true
 
 [dependencies]
 serde.workspace = true
+thiserror.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 rusqlite = { version = "0.41", features = ["bundled"], optional = true }
+serde_json.workspace = true
+csv = "1"
+zip = { version = "9", default-features = false, features = ["deflate"] }
 
 [features]
 default = ["storage"]
@@ -18,5 +22,4 @@ default = ["storage"]
 storage = ["dep:rusqlite"]
 
 [dev-dependencies]
-serde_json.workspace = true
 chrono-tz = "0.10"

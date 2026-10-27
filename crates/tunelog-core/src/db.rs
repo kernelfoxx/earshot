@@ -9,6 +9,7 @@ use std::path::Path;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
+use crate::import::{ImportKind, Parsed};
 use crate::model::Service;
 use crate::normalize;
 use crate::period::Range;
@@ -52,7 +53,33 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX segments_play ON segments(play_id);
     CREATE INDEX segments_time ON segments(start_ms, end_ms);
     ",
+    // v2: imports, deduplication, manual classification
+    "
+    CREATE TABLE imports (
+        id          INTEGER PRIMARY KEY,
+        kind        TEXT NOT NULL,
+        files       TEXT NOT NULL,
+        imported_at INTEGER NOT NULL,
+        added       INTEGER NOT NULL DEFAULT 0,
+        duplicates  INTEGER NOT NULL DEFAULT 0,
+        skipped     INTEGER NOT NULL DEFAULT 0
+    );
+    ALTER TABLE plays ADD COLUMN import_id INTEGER REFERENCES imports(id) ON DELETE CASCADE;
+    ALTER TABLE plays ADD COLUMN import_key TEXT;
+    CREATE UNIQUE INDEX plays_import_key ON plays(import_key);
+    CREATE INDEX plays_import ON plays(import_id);
+
+    -- Manual classification by artist; service NULL means not music.
+    CREATE TABLE artist_rules (
+        norm_artist TEXT PRIMARY KEY,
+        service     TEXT
+    );
+    ",
 ];
+
+/// Two plays of the same track closer than this are considered the same
+/// listen when deduplicating.
+const DEDUP_TOLERANCE_MS: i64 = 90_000;
 
 /// Listening time per service for one range.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
@@ -77,6 +104,50 @@ impl ServiceTotals {
             self.total += ms;
         }
     }
+}
+
+/// Outcome of one import.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct ImportReport {
+    pub import_id: i64,
+    /// New plays stored.
+    pub added: usize,
+    /// Plays that matched an existing play (tracked live or from another export).
+    pub duplicates: usize,
+    /// Plays already present from an earlier import of the same data.
+    pub already_imported: usize,
+    /// Entries that were not music plays.
+    pub skipped: usize,
+    /// New plays whose duration is estimated.
+    pub estimated: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ImportRecord {
+    pub id: i64,
+    pub kind: String,
+    pub files: String,
+    pub imported_at: i64,
+    pub added: i64,
+    pub duplicates: i64,
+    pub skipped: i64,
+}
+
+/// Unclassified plays of one artist, for manual assignment.
+#[derive(Debug, Clone, Serialize)]
+pub struct UnclassifiedGroup {
+    pub norm_artist: String,
+    pub artist: String,
+    pub plays: i64,
+    pub total_ms: i64,
+    pub sample_titles: Vec<String>,
+    pub source_apps: Vec<String>,
+}
+
+enum Resolved {
+    Service(Service),
+    NotMusic,
+    Unknown,
 }
 
 pub struct Db {
@@ -118,6 +189,16 @@ impl Db {
     /// Inserts or updates a live play (keyed by `live_key`) with its segments.
     /// Called both for in-progress checkpoints and for finished plays.
     pub fn save_live_play(&mut self, play: &Play, utc_offset_min: i32) -> Result<()> {
+        let norm_title = normalize::title(&play.title);
+        let norm_artist = normalize::artist(&play.artist);
+        let service = match play.service {
+            Some(s) => Some(s),
+            None => match self.resolve(&norm_artist, &norm_title)? {
+                Resolved::Service(s) => Some(s),
+                Resolved::NotMusic => return self.delete_live_play(&play.live_key),
+                Resolved::Unknown => None,
+            },
+        };
         let tx = self.conn.transaction()?;
         let id: i64 = tx.query_row(
             "INSERT INTO plays (live_key, service, title, artist, album, norm_title, norm_artist,
@@ -131,12 +212,12 @@ impl Db {
              RETURNING id",
             params![
                 play.live_key,
-                play.service.map(Service::as_str),
+                service.map(Service::as_str),
                 play.title,
                 play.artist,
                 play.album,
-                normalize::title(&play.title),
-                normalize::artist(&play.artist),
+                norm_title,
+                norm_artist,
                 play.source_app,
                 play.started_at,
                 play.ended_at,
@@ -186,6 +267,262 @@ impl Db {
         Ok(totals)
     }
 
+    /// Service for an unclassified play: the user's artist rule, else the
+    /// service this track was most often seen on (e.g. in imported history).
+    fn resolve(&self, norm_artist: &str, norm_title: &str) -> Result<Resolved> {
+        let rule: Option<Option<String>> = self
+            .conn
+            .query_row(
+                "SELECT service FROM artist_rules WHERE norm_artist = ?1",
+                [norm_artist],
+                |r| r.get(0),
+            )
+            .optional()?;
+        match rule {
+            Some(None) => return Ok(Resolved::NotMusic),
+            Some(Some(s)) => {
+                if let Some(svc) = Service::from_str_id(&s) {
+                    return Ok(Resolved::Service(svc));
+                }
+            }
+            None => {}
+        }
+        let known: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT service FROM plays
+                 WHERE norm_artist = ?1 AND norm_title = ?2 AND service IS NOT NULL
+                 GROUP BY service ORDER BY COUNT(*) DESC LIMIT 1",
+                [norm_artist, norm_title],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(known
+            .as_deref()
+            .and_then(Service::from_str_id)
+            .map_or(Resolved::Unknown, Resolved::Service))
+    }
+
+    /// Typical length of a track, from the tracker or exact export plays.
+    pub fn known_duration_ms(&self, norm_artist: &str, norm_title: &str) -> Result<Option<i64>> {
+        self.conn.query_row(
+            "SELECT COALESCE(MAX(duration_ms), MAX(CASE WHEN estimated = 0 THEN played_ms END))
+             FROM plays WHERE norm_artist = ?1 AND norm_title = ?2",
+            [norm_artist, norm_title],
+            |r| r.get(0),
+        )
+    }
+
+    /// Stores parsed export plays, skipping ones already imported and
+    /// linking duplicates of plays from other sources.
+    ///
+    /// When the same listen exists twice, the more precise source wins:
+    /// Spotify export > live tracker / exact exports > estimated exports.
+    /// The other one stays stored with `duplicate_of` set and is excluded
+    /// from stats.
+    pub fn insert_imported(
+        &mut self,
+        kind: ImportKind,
+        files: &str,
+        parsed: &Parsed,
+        now_ms: i64,
+    ) -> Result<ImportReport> {
+        let service = kind.service();
+        let origin = kind.origin();
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "INSERT INTO imports (kind, files, imported_at) VALUES (?1, ?2, ?3)",
+            params![origin, files, now_ms],
+        )?;
+        let import_id = tx.last_insert_rowid();
+        let mut report = ImportReport {
+            import_id,
+            skipped: parsed.skipped,
+            ..ImportReport::default()
+        };
+        {
+            let mut insert = tx.prepare(
+                "INSERT OR IGNORE INTO plays
+                    (service, title, artist, album, norm_title, norm_artist, origin, started_at,
+                     ended_at, played_ms, estimated, import_id, import_key)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            )?;
+            let mut segment =
+                tx.prepare("INSERT INTO segments (play_id, start_ms, end_ms) VALUES (?1, ?2, ?3)")?;
+            // Only plays from other sources: back-to-back repeats within one
+            // export are real separate listens.
+            let mut find_same = tx.prepare(
+                "SELECT id, origin, estimated, service FROM plays
+                 WHERE norm_artist = ?2 AND norm_title = ?3 AND origin != ?8
+                   AND (service = ?4 OR service IS NULL) AND duplicate_of IS NULL
+                   AND started_at < ?6 + ?7 AND ended_at > ?5 - ?7
+                 ORDER BY ABS(started_at - ?5) LIMIT 1",
+            )?;
+            let mut mark_dup = tx.prepare("UPDATE plays SET duplicate_of = ?2 WHERE id = ?1")?;
+            let mut set_service =
+                tx.prepare("UPDATE plays SET service = ?2 WHERE id = ?1 AND service IS NULL")?;
+
+            for p in &parsed.plays {
+                let norm_title = normalize::title(&p.title);
+                let norm_artist = normalize::artist(&p.artist);
+                let key = format!("{origin}|{}|{norm_artist}|{norm_title}", p.started_at);
+                let inserted = insert.execute(params![
+                    service.as_str(),
+                    p.title,
+                    p.artist,
+                    p.album,
+                    norm_title,
+                    norm_artist,
+                    origin,
+                    p.started_at,
+                    p.ended_at(),
+                    p.played_ms,
+                    p.estimated,
+                    import_id,
+                    key,
+                ])?;
+                if inserted == 0 {
+                    report.already_imported += 1;
+                    continue;
+                }
+                let id = tx.last_insert_rowid();
+                segment.execute(params![id, p.started_at, p.ended_at()])?;
+
+                let existing = find_same
+                    .query_row(
+                        params![
+                            id,
+                            norm_artist,
+                            norm_title,
+                            service.as_str(),
+                            p.started_at,
+                            p.ended_at(),
+                            DEDUP_TOLERANCE_MS,
+                            origin,
+                        ],
+                        |r| {
+                            Ok((
+                                r.get::<_, i64>(0)?,
+                                r.get::<_, String>(1)?,
+                                r.get::<_, bool>(2)?,
+                                r.get::<_, Option<String>>(3)?,
+                            ))
+                        },
+                    )
+                    .optional()?;
+                match existing {
+                    Some((other, other_origin, other_estimated, other_service)) => {
+                        if other_service.is_none() {
+                            set_service.execute(params![other, service.as_str()])?;
+                        }
+                        if priority(origin, p.estimated) > priority(&other_origin, other_estimated)
+                        {
+                            mark_dup.execute(params![other, id])?;
+                            report.added += 1;
+                            report.estimated += usize::from(p.estimated);
+                        } else {
+                            mark_dup.execute(params![id, other])?;
+                        }
+                        report.duplicates += 1;
+                    }
+                    None => {
+                        report.added += 1;
+                        report.estimated += usize::from(p.estimated);
+                    }
+                }
+            }
+        }
+        tx.execute(
+            "UPDATE imports SET added = ?2, duplicates = ?3, skipped = ?4 WHERE id = ?1",
+            params![
+                import_id,
+                report.added as i64,
+                report.duplicates as i64,
+                report.skipped as i64
+            ],
+        )?;
+        tx.commit()?;
+        Ok(report)
+    }
+
+    pub fn imports(&self) -> Result<Vec<ImportRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, kind, files, imported_at, added, duplicates, skipped
+             FROM imports ORDER BY imported_at DESC",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(ImportRecord {
+                id: r.get(0)?,
+                kind: r.get(1)?,
+                files: r.get(2)?,
+                imported_at: r.get(3)?,
+                added: r.get(4)?,
+                duplicates: r.get(5)?,
+                skipped: r.get(6)?,
+            })
+        })?;
+        rows.collect()
+    }
+
+    /// Removes an import and its plays. Plays it had marked as duplicates
+    /// count again.
+    pub fn delete_import(&mut self, id: i64) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM imports WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
+    /// Unclassified plays long enough to count, grouped by artist.
+    pub fn unclassified(&self, min_play_ms: i64) -> Result<Vec<UnclassifiedGroup>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT norm_artist, COUNT(*), SUM(played_ms),
+                    (SELECT artist FROM plays q WHERE q.norm_artist = p.norm_artist
+                       AND q.service IS NULL ORDER BY started_at DESC LIMIT 1),
+                    GROUP_CONCAT(DISTINCT title), GROUP_CONCAT(DISTINCT source_app)
+             FROM plays p
+             WHERE service IS NULL AND duplicate_of IS NULL AND played_ms >= ?1
+             GROUP BY norm_artist ORDER BY SUM(played_ms) DESC",
+        )?;
+        let split = |s: Option<String>, n: usize| -> Vec<String> {
+            s.map(|s| s.split(',').take(n).map(str::to_owned).collect())
+                .unwrap_or_default()
+        };
+        let rows = stmt.query_map([min_play_ms], |r| {
+            Ok(UnclassifiedGroup {
+                norm_artist: r.get(0)?,
+                plays: r.get(1)?,
+                total_ms: r.get(2)?,
+                artist: r.get(3)?,
+                sample_titles: split(r.get(4)?, 3),
+                source_apps: split(r.get(5)?, 3),
+            })
+        })?;
+        rows.collect()
+    }
+
+    /// Assigns all unclassified plays of an artist to `service`, or deletes
+    /// them when `None` (not music). Future plays follow the same rule.
+    pub fn assign_artist(&mut self, norm_artist: &str, service: Option<Service>) -> Result<()> {
+        let tx = self.conn.transaction()?;
+        let svc = service.map(Service::as_str);
+        tx.execute(
+            "INSERT INTO artist_rules (norm_artist, service) VALUES (?1, ?2)
+             ON CONFLICT(norm_artist) DO UPDATE SET service = excluded.service",
+            params![norm_artist, svc],
+        )?;
+        match svc {
+            Some(s) => tx.execute(
+                "UPDATE plays SET service = ?2 WHERE norm_artist = ?1 AND service IS NULL",
+                params![norm_artist, s],
+            )?,
+            None => tx.execute(
+                "DELETE FROM plays WHERE norm_artist = ?1 AND service IS NULL",
+                [norm_artist],
+            )?,
+        };
+        tx.commit()
+    }
+
     /// Number of stored plays (all origins), mainly for tests and diagnostics.
     pub fn play_count(&self) -> Result<i64> {
         self.conn
@@ -203,9 +540,19 @@ impl Db {
     }
 }
 
+/// Higher wins when the same listen comes from two sources.
+fn priority(origin: &str, estimated: bool) -> u8 {
+    match (origin, estimated) {
+        ("spotify_export", _) => 3,
+        (_, true) => 1,
+        _ => 2,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::import::ImportedPlay;
 
     const S: i64 = 1_000;
 
@@ -305,8 +652,9 @@ mod tests {
             0,
         )
         .unwrap();
-        db.save_live_play(&play("b|1", None, vec![(0, 90 * S)]), 0)
-            .unwrap();
+        let mut unknown = play("b|1", None, vec![(0, 90 * S)]);
+        unknown.artist = "Unknown Artist".into();
+        db.save_live_play(&unknown, 0).unwrap();
         db.save_live_play(
             &play("c|1", Some(Service::YoutubeMusic), vec![(0, 31 * S)]),
             0,
@@ -336,5 +684,197 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM segments", [], |r| r.get(0))
             .unwrap();
         assert_eq!(segs, 0);
+    }
+
+    fn imported(title: &str, artist: &str, start: i64, ms: i64, estimated: bool) -> ImportedPlay {
+        ImportedPlay {
+            title: title.into(),
+            artist: artist.into(),
+            album: None,
+            started_at: start,
+            played_ms: ms,
+            estimated,
+        }
+    }
+
+    fn parsed(plays: Vec<ImportedPlay>) -> Parsed {
+        Parsed { plays, skipped: 0 }
+    }
+
+    fn all(db: &Db) -> ServiceTotals {
+        db.totals(Range::EVERYTHING, DEFAULT_MIN_PLAY_MS).unwrap()
+    }
+
+    #[test]
+    fn reimport_is_idempotent() {
+        let mut db = Db::open_in_memory().unwrap();
+        let data = parsed(vec![imported("Get Lucky", "Daft Punk", 0, 200 * S, false)]);
+        let r1 = db
+            .insert_imported(ImportKind::Spotify, "a.json", &data, 1)
+            .unwrap();
+        let r2 = db
+            .insert_imported(ImportKind::Spotify, "a.json", &data, 2)
+            .unwrap();
+        assert_eq!((r1.added, r1.already_imported), (1, 0));
+        assert_eq!((r2.added, r2.already_imported), (0, 1));
+        assert_eq!(all(&db).spotify, 200 * S);
+    }
+
+    #[test]
+    fn repeats_within_one_export_are_kept() {
+        let mut db = Db::open_in_memory().unwrap();
+        let data = parsed(vec![
+            imported("Get Lucky", "Daft Punk", 0, 200 * S, false),
+            imported("Get Lucky", "Daft Punk", 200 * S, 200 * S, false),
+        ]);
+        let r = db
+            .insert_imported(ImportKind::Spotify, "a.json", &data, 1)
+            .unwrap();
+        assert_eq!((r.added, r.duplicates), (2, 0));
+        assert_eq!(all(&db).spotify, 400 * S);
+    }
+
+    #[test]
+    fn spotify_export_supersedes_live_play() {
+        let mut db = Db::open_in_memory().unwrap();
+        // Tracker saw 190 s; the export says 200 s, starting 20 s earlier.
+        db.save_live_play(
+            &play("s|1", Some(Service::Spotify), vec![(20 * S, 210 * S)]),
+            0,
+        )
+        .unwrap();
+        let r = db
+            .insert_imported(
+                ImportKind::Spotify,
+                "x.json",
+                &parsed(vec![imported("Get Lucky", "Daft Punk", 0, 200 * S, false)]),
+                1,
+            )
+            .unwrap();
+        assert_eq!((r.added, r.duplicates), (1, 1));
+        assert_eq!(all(&db).spotify, 200 * S, "counted once, from the export");
+    }
+
+    #[test]
+    fn live_play_beats_estimated_takeout() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.save_live_play(
+            &play("c|1", Some(Service::YoutubeMusic), vec![(0, 150 * S)]),
+            0,
+        )
+        .unwrap();
+        let r = db
+            .insert_imported(
+                ImportKind::Takeout,
+                "watch-history.json",
+                &parsed(vec![
+                    // "Get Lucky (feat. Pharrell)" by "Daft Punk - Topic" normalizes the same.
+                    imported("Get Lucky", "Daft Punk - Topic", 2 * S, 210 * S, true),
+                    imported("Strobe", "deadmau5", 600 * S, 210 * S, true),
+                ]),
+                1,
+            )
+            .unwrap();
+        assert_eq!((r.added, r.duplicates, r.estimated), (1, 1, 1));
+        assert_eq!(all(&db).youtube_music, 150 * S + 210 * S);
+    }
+
+    #[test]
+    fn import_classifies_overlapping_unclassified_live_play() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.save_live_play(&play("c|1", None, vec![(0, 150 * S)]), 0)
+            .unwrap();
+        db.insert_imported(
+            ImportKind::Takeout,
+            "w.json",
+            &parsed(vec![imported("Get Lucky", "Daft Punk", 0, 210 * S, true)]),
+            1,
+        )
+        .unwrap();
+        let t = all(&db);
+        assert_eq!(t.unclassified, 0);
+        assert_eq!(t.youtube_music, 150 * S, "live play kept, now classified");
+    }
+
+    #[test]
+    fn deleting_import_restores_superseded_plays() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.save_live_play(&play("s|1", Some(Service::Spotify), vec![(0, 190 * S)]), 0)
+            .unwrap();
+        let r = db
+            .insert_imported(
+                ImportKind::Spotify,
+                "x.json",
+                &parsed(vec![imported("Get Lucky", "Daft Punk", 0, 200 * S, false)]),
+                1,
+            )
+            .unwrap();
+        db.delete_import(r.import_id).unwrap();
+        assert_eq!(all(&db).spotify, 190 * S);
+        assert!(db.imports().unwrap().is_empty());
+    }
+
+    #[test]
+    fn known_track_classifies_new_live_plays() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.insert_imported(
+            ImportKind::Soundcloud,
+            "h.csv",
+            &parsed(vec![imported("Get Lucky", "Daft Punk", 0, 200 * S, false)]),
+            1,
+        )
+        .unwrap();
+        db.save_live_play(&play("c|9", None, vec![(10_000 * S, 10_100 * S)]), 0)
+            .unwrap();
+        assert_eq!(
+            db.live_play_service("c|9").unwrap(),
+            Some(Some("soundcloud".into()))
+        );
+    }
+
+    #[test]
+    fn artist_rules() {
+        let mut db = Db::open_in_memory().unwrap();
+        db.save_live_play(&play("c|1", None, vec![(0, 60 * S)]), 0)
+            .unwrap();
+        let groups = db.unclassified(DEFAULT_MIN_PLAY_MS).unwrap();
+        assert_eq!(groups.len(), 1);
+        assert_eq!(groups[0].artist, "Daft Punk");
+        assert_eq!(groups[0].total_ms, 60 * S);
+
+        db.assign_artist("daft punk", Some(Service::Soundcloud))
+            .unwrap();
+        assert_eq!(all(&db).soundcloud, 60 * S);
+        assert!(db.unclassified(DEFAULT_MIN_PLAY_MS).unwrap().is_empty());
+
+        // Later unclassified plays by the same artist follow the rule.
+        db.save_live_play(&play("c|2", None, vec![(100 * S, 160 * S)]), 0)
+            .unwrap();
+        assert_eq!(all(&db).soundcloud, 120 * S);
+
+        // "Not music" removes them and drops future ones.
+        let mut other = play("c|3", None, vec![(200 * S, 260 * S)]);
+        other.artist = "Podcast Host".into();
+        db.save_live_play(&other, 0).unwrap();
+        db.assign_artist("podcast host", None).unwrap();
+        other.live_key = "c|4".into();
+        db.save_live_play(&other, 0).unwrap();
+        assert_eq!(all(&db).unclassified, 0);
+        assert_eq!(db.play_count().unwrap(), 2);
+    }
+
+    #[test]
+    fn known_duration_prefers_tracker_length() {
+        let mut db = Db::open_in_memory().unwrap();
+        assert_eq!(
+            db.known_duration_ms("daft punk", "get lucky").unwrap(),
+            None
+        );
+        db.save_live_play(&play("s|1", Some(Service::Spotify), vec![(0, 60 * S)]), 0)
+            .unwrap();
+        assert_eq!(
+            db.known_duration_ms("daft punk", "get lucky").unwrap(),
+            Some(248_000)
+        );
     }
 }

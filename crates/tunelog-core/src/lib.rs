@@ -6,6 +6,7 @@
 pub mod classify;
 #[cfg(feature = "storage")]
 pub mod db;
+pub mod import;
 pub mod media;
 pub mod model;
 pub mod normalize;

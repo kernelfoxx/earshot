@@ -59,6 +59,13 @@ No official APIs, no servers, no telemetry.
   export contains at most the last 1,000 plays and its format is
   undocumented, so the parser auto-detects JSON/CSV and lets the user map
   columns.
-- **Deduplication:** same service + normalized artist/title + overlapping
-  interval (±90 s). Priority: Spotify export > live tracker > Takeout.
+- **Deduplication:** same service (or an unclassified live play) +
+  normalized artist/title + overlapping interval (±90 s), only against plays
+  from a *different* source, so back-to-back repeats in one export stay
+  separate. Priority: Spotify export > live tracker / exact exports >
+  estimated exports. The losing play is kept with `duplicate_of` set, so
+  removing an import restores it. Re-importing is idempotent via a per-play
+  import key.
+- **Unclassified plays** are resolved by the user's artist rules, else by the
+  service the same track was seen on (e.g. in imported history).
 - **Charts:** ECharts (canvas renderer, built-in heatmap, fast on large data).

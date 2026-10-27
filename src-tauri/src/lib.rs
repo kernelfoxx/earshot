@@ -25,10 +25,17 @@ pub fn run() {
             MacosLauncher::LaunchAgent,
             Some(vec![MINIMIZED_ARG]),
         ))
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::get_overview,
             commands::get_now_playing,
+            commands::import_files,
+            commands::preview_soundcloud,
+            commands::list_imports,
+            commands::delete_import,
+            commands::get_unclassified,
+            commands::assign_artist,
         ])
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
