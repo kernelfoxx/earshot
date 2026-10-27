@@ -29,16 +29,30 @@ No official APIs, no servers, no telemetry.
   without data loss. The same rule applies to imported Spotify history.
 - **Storage:** UTC milliseconds plus the local UTC offset at play time for
   live plays. Weeks start on Monday, buckets use the local time zone.
-- **Service detection (no browser extension):**
-  1. Spotify desktop: by source app (`Spotify.exe`, MPRIS `spotify`).
-  2. Artwork host when the backend exposes it (Firefox on Linux):
-     `lh3.googleusercontent.com` → YouTube Music, `i1.sndcdn.com` → SoundCloud,
-     `i.ytimg.com` → YouTube video (not music).
-  3. Metadata heuristics: YouTube Music sets an album for songs, plain YouTube
-     does not; "Official Video", "- Topic" patterns; matches against imported
-     history.
-  4. Anything uncertain goes to **Unclassified** and is excluded from stats
-     until the user assigns it or adds a rule.
+  In-progress plays are checkpointed every 60 s, so a crash loses at most a
+  minute. A gap of more than 60 s between polls (sleep/hibernate) is not
+  counted.
+- **Low overhead:** the tracker reacts to OS change events (GSMTC events,
+  MPRIS `PropertiesChanged`/`NameOwnerChanged`) and polls every 5 s as a
+  safety net. Closing the window destroys the webview; the tray recreates it.
+- **Service detection** (no browser extension, see `crates/tunelog-core/src/classify.rs`):
+  1. Desktop apps by source app: Spotify (`Spotify.exe`, MPRIS `spotify`),
+     unofficial YouTube Music clients (`youtube-music`). Other players are ignored.
+  2. Browsers, by artwork host when the backend exposes the original URL
+     (Firefox on Linux): `i1.sndcdn.com` → SoundCloud,
+     `lh3.googleusercontent.com` → YouTube Music, `i.ytimg.com` → YouTube video
+     (ignored), `i.scdn.co` → Spotify web player.
+  3. Browsers, by artwork shape (thumbnail decoded on Windows, local artwork
+     file on Chromium/Linux): 16:9 → YouTube video (ignored); square with an
+     album → YouTube Music; square without an album → SoundCloud.
+  4. Album present but no artwork info → YouTube Music.
+  5. Anything else goes to **Unclassified**: stored, but excluded from
+     totals until the user assigns it (assignment UI comes in milestone 2).
+
+  Known limitations: the Spotify web player in Chrome/Edge on Windows looks
+  like YouTube Music (square cover + album), and a non-music site with square
+  artwork and no album would be counted as SoundCloud. Imported history will
+  be used to correct such cases in milestone 2.
 - **Imports:** Spotify `ts` is the *end* of a stream. Takeout has no duration:
   use the known track duration, else the gap to the next entry capped at
   6 min, else 3.5 min; such plays are flagged as estimated. SoundCloud's

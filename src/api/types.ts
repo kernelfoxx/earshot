@@ -20,3 +20,37 @@ export interface AppInfo {
   version: string;
   platform: string;
 }
+
+/** Milliseconds per service; mirrors `tunelog_core::db::ServiceTotals`. */
+export interface ServiceTotals {
+  spotify: number;
+  youtube_music: number;
+  soundcloud: number;
+  unclassified: number;
+  total: number;
+}
+
+export interface PeriodTotals {
+  period: PeriodKind;
+  totals: ServiceTotals;
+}
+
+export interface Overview {
+  periods: PeriodTotals[];
+  backend: string | null;
+  tracking_error: string | null;
+}
+
+/** Mirrors `tunelog_core::tracker::Play`. */
+export interface Play {
+  live_key: string;
+  service: Service | null;
+  title: string;
+  artist: string;
+  album: string | null;
+  source_app: string;
+  duration_ms: number | null;
+  started_at: number;
+  ended_at: number;
+  played_ms: number;
+}

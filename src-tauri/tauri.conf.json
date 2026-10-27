@@ -17,7 +17,8 @@
         "width": 1180,
         "height": 780,
         "minWidth": 880,
-        "minHeight": 600
+        "minHeight": 600,
+        "create": false
       }
     ],
     "security": {
@@ -26,7 +27,13 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis", "msi", "appimage", "deb", "rpm"],
+    "targets": [
+      "nsis",
+      "msi",
+      "appimage",
+      "deb",
+      "rpm"
+    ],
     "category": "Music",
     "shortDescription": "Local-first music listening tracker",
     "icon": [
