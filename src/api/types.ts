@@ -54,3 +54,55 @@ export interface Play {
   ended_at: number;
   played_ms: number;
 }
+
+export type ImportKind = "spotify" | "takeout" | "soundcloud";
+
+/** Mirrors `tunelog_core::db::ImportReport`. */
+export interface ImportReport {
+  import_id: number;
+  added: number;
+  duplicates: number;
+  already_imported: number;
+  skipped: number;
+  estimated: number;
+}
+
+export interface ImportRecord {
+  id: number;
+  kind: string;
+  files: string;
+  imported_at: number;
+  added: number;
+  duplicates: number;
+  skipped: number;
+}
+
+/** Column names in the SoundCloud file feeding each field. */
+export interface SoundcloudMapping {
+  time: string | null;
+  title: string | null;
+  artist: string | null;
+  duration: string | null;
+  url: string | null;
+}
+
+export interface SoundcloudPreview {
+  columns: string[];
+  mapping: SoundcloudMapping;
+  rows: number;
+  sample: {
+    time: number | null;
+    title: string | null;
+    artist: string | null;
+    duration_ms: number | null;
+  }[];
+}
+
+export interface UnclassifiedGroup {
+  norm_artist: string;
+  artist: string;
+  plays: number;
+  total_ms: number;
+  sample_titles: string[];
+  source_apps: string[];
+}

@@ -24,11 +24,24 @@ artwork shape (YouTube videos have 16:9 thumbnails, music covers are square)
 and album. Plain YouTube videos are not counted. Audio that can't be matched
 to a service is kept aside as *unclassified* and not counted.
 
-Coming soon: importing your history from data exports:
+### Importing your history
 
-- **Spotify** — Extended Streaming History
-- **YouTube Music** — Google Takeout `watch-history.json`
-- **SoundCloud** — GDPR data export
+On the **Import** page you can load the data exports the services give you.
+Pick the downloaded zip as is, or the files inside it:
+
+| Service | Export | Notes |
+|---------|--------|-------|
+| Spotify | *Extended streaming history* from Account → Privacy settings (arrives within ~30 days) | Exact play times and durations |
+| YouTube Music | Google Takeout → YouTube and YouTube Music → history, **JSON** format | Only YouTube Music entries; durations are estimated |
+| SoundCloud | GDPR data request | Last 1,000 plays only; columns are detected automatically and can be adjusted |
+
+Importing the same file twice is safe, and plays TuneLog already tracked live
+are not counted twice: the more precise source wins (Spotify export, then the
+live tracker, then estimated exports). An import can be removed again.
+
+Browser audio that could not be matched to a service is listed under
+**Unclassified audio**, where you assign it per artist; later plays by that
+artist follow your choice.
 
 ## Privacy
 

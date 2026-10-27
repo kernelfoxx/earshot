@@ -1,0 +1,54 @@
+[
+  {
+    "ts": "2024-03-01T20:04:08Z",
+    "platform": "windows",
+    "ms_played": 248413,
+    "conn_country": "DE",
+    "master_metadata_track_name": "Get Lucky (feat. Pharrell Williams and Nile Rodgers)",
+    "master_metadata_album_artist_name": "Daft Punk",
+    "master_metadata_album_album_name": "Random Access Memories",
+    "spotify_track_uri": "spotify:track:69kOkLUCkxIZYexIgSG8rq",
+    "episode_name": null,
+    "episode_show_name": null,
+    "spotify_episode_uri": null,
+    "reason_start": "trackdone",
+    "reason_end": "trackdone",
+    "shuffle": false,
+    "skipped": false,
+    "offline": false,
+    "incognito_mode": false
+  },
+  {
+    "ts": "2024-03-01T20:04:20Z",
+    "ms_played": 12000,
+    "master_metadata_track_name": "Instant Crush",
+    "master_metadata_album_artist_name": "Daft Punk",
+    "master_metadata_album_album_name": "Random Access Memories",
+    "spotify_track_uri": "spotify:track:2cGxRwrMyEAp8dEbuZaVv6",
+    "skipped": true
+  },
+  {
+    "ts": "2024-03-01T21:00:00Z",
+    "ms_played": 1800000,
+    "master_metadata_track_name": null,
+    "master_metadata_album_artist_name": null,
+    "master_metadata_album_album_name": null,
+    "spotify_track_uri": null,
+    "episode_name": "Episode 12",
+    "episode_show_name": "Some Podcast"
+  },
+  {
+    "ts": "2024-03-01T22:00:00Z",
+    "ms_played": 600000,
+    "master_metadata_track_name": null,
+    "master_metadata_album_artist_name": null,
+    "audiobook_title": "Some Book"
+  },
+  {
+    "ts": "2024-03-01T22:10:00Z",
+    "ms_played": 0,
+    "master_metadata_track_name": "Contact",
+    "master_metadata_album_artist_name": "Daft Punk",
+    "master_metadata_album_album_name": "Random Access Memories"
+  }
+]

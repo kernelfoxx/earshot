@@ -1,0 +1,51 @@
+[
+  {
+    "header": "YouTube Music",
+    "title": "Watched Группа крови",
+    "titleUrl": "https://music.youtube.com/watch?v=aaaaaaaaaaa",
+    "subtitles": [{ "name": "Кино - Topic", "url": "https://www.youtube.com/channel/UC1" }],
+    "time": "2024-03-01T20:03:35.000Z",
+    "products": ["YouTube"],
+    "activityControls": ["YouTube watch history"]
+  },
+  {
+    "header": "YouTube",
+    "title": "Watched How to cook pasta",
+    "titleUrl": "https://www.youtube.com/watch?v=bbbbbbbbbbb",
+    "subtitles": [{ "name": "Cooking Channel", "url": "https://www.youtube.com/channel/UC2" }],
+    "time": "2024-03-01T20:05:00.000Z",
+    "products": ["YouTube"]
+  },
+  {
+    "header": "YouTube Music",
+    "title": "Watched Strobe",
+    "titleUrl": "https://music.youtube.com/watch?v=ccccccccccc",
+    "subtitles": [{ "name": "deadmau5", "url": "https://www.youtube.com/channel/UC3" }],
+    "time": "2024-03-01T20:03:20.000Z",
+    "products": ["YouTube"]
+  },
+  {
+    "header": "YouTube Music",
+    "title": "Watched Some Ad",
+    "titleUrl": "https://music.youtube.com/watch?v=ddddddddddd",
+    "subtitles": [{ "name": "Brand" }],
+    "time": "2024-03-01T20:03:30.000Z",
+    "products": ["YouTube"],
+    "details": [{ "name": "From Google Ads" }]
+  },
+  {
+    "header": "YouTube Music",
+    "title": "Watched https://music.youtube.com/watch?v=eeeeeeeeeee",
+    "titleUrl": "https://music.youtube.com/watch?v=eeeeeeeeeee",
+    "time": "2024-03-01T20:03:25.000Z",
+    "products": ["YouTube"]
+  },
+  {
+    "header": "YouTube Music",
+    "title": "Watched Get Lucky",
+    "titleUrl": "https://music.youtube.com/watch?v=fffffffffff",
+    "subtitles": [{ "name": "Daft Punk - Topic", "url": "https://www.youtube.com/channel/UC4" }],
+    "time": "2024-03-01T20:00:00.000Z",
+    "products": ["YouTube"]
+  }
+]

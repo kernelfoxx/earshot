@@ -84,7 +84,7 @@ export function Dashboard() {
       {unclassified > 0 && (
         <p className="muted small">
           {formatDuration(unclassified)} of browser audio could not be matched to a service
-          and is not counted. You will be able to assign it in a later version.
+          and is not counted. You can assign it on the Import page.
         </p>
       )}
     </div>
