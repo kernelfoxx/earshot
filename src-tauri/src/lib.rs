@@ -35,5 +35,5 @@ pub fn run() {
             }
         })
         .run(tauri::generate_context!())
-        .expect("error while running Earshot");
+        .expect("error while running TuneLog");
 }

@@ -3,7 +3,7 @@
 //! Each OS gets its own [`MediaSource`] implementation; the rest of the app
 //! only talks to the trait, so adding macOS later means adding one module.
 
-pub use earshot_core::media::{MediaSnapshot, PlaybackStatus};
+pub use tunelog_core::media::{MediaSnapshot, PlaybackStatus};
 
 #[derive(Debug, thiserror::Error)]
 pub enum MediaError {

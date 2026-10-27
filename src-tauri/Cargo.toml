@@ -1,5 +1,5 @@
 [package]
-name = "earshot"
+name = "tunelog"
 description = "Local-first music listening tracker"
 version.workspace = true
 edition.workspace = true
@@ -8,15 +8,15 @@ repository.workspace = true
 rust-version.workspace = true
 
 [lib]
-name = "earshot_lib"
+name = "tunelog_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-earshot-core.workspace = true
-earshot-media.workspace = true
+tunelog-core.workspace = true
+tunelog-media.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 log.workspace = true

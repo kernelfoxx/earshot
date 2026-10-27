@@ -1,6 +1,6 @@
 export type ThemePref = "system" | "light" | "dark";
 
-const KEY = "earshot.theme";
+const KEY = "tunelog.theme";
 
 export function getThemePref(): ThemePref {
   try {

@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="public/earshot.svg" width="96" alt="Earshot logo" />
+  <img src="public/tunelog.svg" width="96" alt="TuneLog logo" />
 </p>
 
-<h1 align="center">Earshot</h1>
+<h1 align="center">TuneLog</h1>
 
 <p align="center">
   🎧 Track how much music you listen to across Spotify, YouTube Music &amp; SoundCloud.<br/>
@@ -13,7 +13,7 @@
 
 ## How it works
 
-Earshot runs quietly in your system tray and watches the operating system's
+TuneLog runs quietly in your system tray and watches the operating system's
 media controls (GSMTC on Windows, MPRIS on Linux) to see what is playing,
 which app is playing it and whether it is actually playing. It counts only the
 time a track is really playing, and a play counts once it reaches 30 seconds.
@@ -27,7 +27,7 @@ You can also import your history from data exports:
 ## Privacy
 
 - All data is stored in a local SQLite database on your computer.
-- Earshot makes no network requests: no telemetry, no analytics, no accounts.
+- TuneLog makes no network requests: no telemetry, no analytics, no accounts.
 - No official streaming service APIs are used.
 
 ## Development
@@ -53,8 +53,8 @@ cargo test --workspace
 
 | Path | Purpose |
 |------|---------|
-| `crates/earshot-core` | Platform-independent logic: models, normalization, tracking, stats, importers |
-| `crates/earshot-media` | `MediaSource` trait and OS backends (Windows GSMTC, Linux MPRIS) |
+| `crates/tunelog-core` | Platform-independent logic: models, normalization, tracking, stats, importers |
+| `crates/tunelog-media` | `MediaSource` trait and OS backends (Windows GSMTC, Linux MPRIS) |
 | `src-tauri` | Tauri shell: tray, autostart, commands |
 | `src` | React + TypeScript UI |
 

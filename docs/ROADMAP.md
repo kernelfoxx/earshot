@@ -1,6 +1,6 @@
 # Roadmap
 
-Earshot tracks listening time across Spotify, YouTube Music and SoundCloud
+TuneLog tracks listening time across Spotify, YouTube Music and SoundCloud
 using the operating system's media controls and the user's own data exports.
 No official APIs, no servers, no telemetry.
 
