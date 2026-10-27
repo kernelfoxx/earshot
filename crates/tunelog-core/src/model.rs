@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-/// A music streaming service Earshot tracks.
+/// A music streaming service TuneLog tracks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Service {

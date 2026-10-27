@@ -19,8 +19,8 @@ export function Sidebar({ current, onNavigate }: Props) {
   return (
     <nav className="sidebar">
       <div className="brand">
-        <img src="/earshot.svg" alt="" width={28} height={28} />
-        <span>Earshot</span>
+        <img src="/tunelog.svg" alt="" width={28} height={28} />
+        <span>TuneLog</span>
       </div>
       <ul>
         {items.map((item) => (

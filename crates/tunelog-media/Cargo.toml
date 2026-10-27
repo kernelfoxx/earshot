@@ -1,6 +1,6 @@
 [package]
-name = "earshot-media"
-description = "System media session backends for Earshot (Windows GSMTC, Linux MPRIS)."
+name = "tunelog-media"
+description = "System media session backends for TuneLog (Windows GSMTC, Linux MPRIS)."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,5 +8,5 @@ repository.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-earshot-core.workspace = true
+tunelog-core.workspace = true
 thiserror.workspace = true

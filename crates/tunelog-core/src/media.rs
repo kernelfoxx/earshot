@@ -1,6 +1,6 @@
 //! OS-agnostic description of what a system media session is playing.
 //!
-//! Platform backends (`earshot-media`) translate GSMTC / MPRIS data into
+//! Platform backends (`tunelog-media`) translate GSMTC / MPRIS data into
 //! these types; the tracker in this crate consumes them.
 
 use serde::{Deserialize, Serialize};

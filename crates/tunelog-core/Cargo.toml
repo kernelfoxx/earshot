@@ -1,6 +1,6 @@
 [package]
-name = "earshot-core"
-description = "Platform-independent domain logic for Earshot: models, normalization, sessions, stats, importers."
+name = "tunelog-core"
+description = "Platform-independent domain logic for TuneLog: models, normalization, sessions, stats, importers."
 version.workspace = true
 edition.workspace = true
 license.workspace = true
